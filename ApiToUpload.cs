@@ -50,11 +50,11 @@ namespace InjectData
             return result;
         }
 
-        public string GetTablesInDB()
+        public XElement GetTablesInDB()
         {
             var result = (string)db.ExecuteScalarProc(
                 "get_tables_names");
-            return result;
+            return XElement.Parse(result);
         }
         public void Dispose()
         {

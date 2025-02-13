@@ -11,49 +11,66 @@ namespace InjectData
 
     internal class Program
     {
-        private static Dictionary<string, (StringBuilder tableData, bool IsFirstRecord)> namesOfTablesData = new Dictionary<string, (StringBuilder, bool)> ();
+        private static Dictionary<string, List<string>> namesOfTablesData = new();
 
-        private static Dictionary<string, TableColumnInfo[]> tableColumnsCache = new Dictionary<string, TableColumnInfo[]>();
-        private static void AddToDictionary(string tablesNames, ApiToUpload api)
+        private static Dictionary<string, TableColumnInfo[]> tableColumnsCache = new();
+        private static void AddToDictionary(XElement tablesNames, ApiToUpload api)
         {
-            foreach (var tableName in tablesNames.Split(' ').ToArray())
+            var names = tablesNames.Elements().Select(e => (string)e.Attribute("t"));
+            foreach (var tableName in names)
             {
                 if (!namesOfTablesData.ContainsKey(tableName))
                 {
-                    var ntb = new StringBuilder();
-                    ntb.Append($"insert into [dbo].[{tableName}] (");
-                    var columns = api.GetTableColumns(tableName).Elements().First().Elements().Select(TableColumnInfo.Parse).ToArray();
-                    ntb.Append("[id_education_plan]");
-                    foreach (var column in columns)
-                    {
-                        ntb.Append($", [{column.Name}]");
-                    }
-                    ntb.Append(")\n");
-                    ntb.Append("values\n\t");
-
-                    namesOfTablesData[tableName] = (ntb, true);
+                    namesOfTablesData[tableName] = new();
                 }
             }
             Console.WriteLine("Словарь сформирован");
         }
 
-        private static void SaveDictionaryToFiles(Dictionary<string, StringBuilder> nameOfTablesData, string Directory)
+        private static void SaveDictionaryToFiles(Dictionary<string, List<string>> nameOfTablesData, string Directory)
         {
             foreach (var keyAndValue in nameOfTablesData)
             {
                 var fileName = keyAndValue.Key;
                 var fileValue = keyAndValue.Value;
                 var filePath = Path.Combine(Directory, $"{fileName}.txt");
+                
+                var insert = 
+                    $"insert into [dbo].[{fileName}] ([id_education_plan], [" 
+                    + string.Join("], [", tableColumnsCache[fileName].Select(ci => ci.Name)) 
+                    + "]) values";
+
+                //var columns = (fileName).Elements().First().Elements().Select(TableColumnInfo.Parse).ToArray();
+                //insert.Append("[id_education_plan]");
+                //foreach (var column in columns)
+                //{
+
+                //}
+                //insert.Append(")\n");
+                //insert.Append("values\n\t");
+
+                var sb = new StringBuilder();
+
+                var valuesChunks = fileValue.Chunk(1000).Select(c => string.Join("," + Environment.NewLine, c));
+                foreach (var chunk in valuesChunks)
+                {
+                    sb.AppendLine(insert);
+                    sb.AppendLine(chunk);
+                    sb.AppendLine("GO");
+                }
+
+                var content =  sb.ToString();
 
                 try
                 {
-                    File.WriteAllText(filePath, fileValue.ToString(), Encoding.Unicode);
-                    Console.WriteLine($"Успешная запись в файл: {fileName}");
+                    File.WriteAllText(filePath, content, Encoding.Unicode);
                 }
-                catch (Exception ex)
+                catch (IOException ex)
                 {
                     Console.WriteLine($"Ошибка записи в файл: {fileName}");
                 }
+
+                Console.WriteLine($"Успешная запись в файл: {fileName}");
             }
         }
         //Сделать словарь
@@ -64,20 +81,9 @@ namespace InjectData
             var filePathFromPlans = string.Join(Path.DirectorySeparatorChar, parts[plansIndex..]);
             return (filePathFromPlans);
         }
-        private static List<string> GetXmlFiles(string folderPath)
+        private static string[] GetXmlFiles(string folderPath)
         {
-            List<string> xmlFiles = new List<string>();
-
-            foreach (string file in Directory.GetFiles(folderPath, "*.plx"))
-            {
-                xmlFiles.Add(file);
-            }
-
-            foreach (string subfolder in Directory.GetDirectories(folderPath))
-            {
-                xmlFiles.AddRange(GetXmlFiles(subfolder));
-            }
-
+            var xmlFiles = Directory.GetFiles(folderPath, "*.plx", SearchOption.AllDirectories).ToArray();
             return xmlFiles;
         }
 
@@ -118,19 +124,12 @@ namespace InjectData
             {
                 var elName = element.Name.LocalName;
                 
-                if (namesOfTablesData.TryGetValue(elName, out var tableInfo))
+                if (namesOfTablesData.TryGetValue(elName, out var lst))
                 {
-                    var (tableRow, isFirstRecord) = tableInfo;
+                    var tableRow = new StringBuilder();
 
-                    if (isFirstRecord)
-                    {
-                        tableRow.Append("(");
-                        namesOfTablesData[elName] = (tableRow, false);
-                    }
-                    else
-                    {
-                        tableRow.Append(", (");
-                    }
+                    tableRow.Append("(");
+
                     tableRow.Append($"{idFile}");
 
                     var columns = GetCachedTableColumns(elName, api);
@@ -141,9 +140,22 @@ namespace InjectData
 
                         if (attrValue is not null && attrValue.Value != "" && column.Datatype is not null)
                         {
-                            if (column.Datatype.Contains("varchar"))
+                            if (column.Datatype.StartsWith("varchar") || column.Datatype.StartsWith("datetime2"))
                             {
-                                tableRow.Append($", '{attrValue.Value}'");
+                                if (attrValue.Value.Contains("'"))
+                                {
+                                    var toBase64Encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(attrValue.Value));
+                                    tableRow.Append($", 'PRFX_B64:{toBase64Encoded}'");
+                                }
+                                else
+                                {
+                                    tableRow.Append($", '{attrValue.Value}'");
+                                }
+                                    
+                            }
+                            else if (column.Datatype == "bit")
+                            {
+                                tableRow.Append(attrValue.Value == "true" ? ", 1" : ", 0");
                             }
                             else
                             {
@@ -155,14 +167,15 @@ namespace InjectData
                             tableRow.Append($", null");
                         }
                     }
-                    tableRow.Append(")\n\t");
+                    tableRow.Append(")");
+                    lst.Add(tableRow.ToString());
                 }
             }
         }
 
         static void MainLoop(ApiToUpload api)
         {
-            //var input = "C:\\Users\\kilyushev_nd\\Desktop\\PlanyVS\\Планы";
+            
             var input = "D:\\khsu\\Планы";
             Console.WriteLine($"Путь к папке 'Планы': {input}");
             var tablesNames = api.GetTablesInDB();
@@ -193,7 +206,7 @@ namespace InjectData
                 //}
 
             });
-            SaveDictionaryToFiles(namesOfTablesData.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.tableData), "D:\\khsu\\E\\ForSQL\\"); // Папка для сохранения
+            SaveDictionaryToFiles(namesOfTablesData, "D:\\khsu\\E\\ForSQL"); // Папка для сохранения "C:\\Users\\kilyushev_nd\\Desktop\\PlanyVS\\Final"
             //}
             //catch (Exception ex)
             //{
