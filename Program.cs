@@ -11,16 +11,16 @@ namespace InjectData
 
     internal class Program
     {
-        private static Dictionary<string, StringBuilder> namesOfTablesData = new Dictionary<string, StringBuilder> { };
+        private static Dictionary<string, (StringBuilder tableData, bool IsFirstRecord)> namesOfTablesData = new Dictionary<string, (StringBuilder, bool)> ();
 
+        private static Dictionary<string, TableColumnInfo[]> tableColumnsCache = new Dictionary<string, TableColumnInfo[]>();
         private static void AddToDictionary(string tablesNames, ApiToUpload api)
         {
             foreach (var tableName in tablesNames.Split(' ').ToArray())
             {
                 if (!namesOfTablesData.ContainsKey(tableName))
                 {
-                    namesOfTablesData[tableName] = new StringBuilder();
-                    var ntb = namesOfTablesData[tableName];
+                    var ntb = new StringBuilder();
                     ntb.Append($"insert into [dbo].[{tableName}] (");
                     var columns = api.GetTableColumns(tableName).Elements().First().Elements().Select(TableColumnInfo.Parse).ToArray();
                     ntb.Append("[id_education_plan]");
@@ -30,6 +30,8 @@ namespace InjectData
                     }
                     ntb.Append(")\n");
                     ntb.Append("values\n\t");
+
+                    namesOfTablesData[tableName] = (ntb, true);
                 }
             }
             Console.WriteLine("Словарь сформирован");
@@ -95,87 +97,108 @@ namespace InjectData
             }
         }
 
+        private static TableColumnInfo[] GetCachedTableColumns(string tableName, ApiToUpload api)
+        {
+            if (!tableColumnsCache.ContainsKey(tableName))
+            {
+                var columns = api.GetTableColumns(tableName).Elements().First().Elements().Select(TableColumnInfo.Parse).ToArray();
+                tableColumnsCache[tableName] = columns;
+            }
+            return tableColumnsCache[tableName];
+        }
+
         private static void GetDataForTables(string filePath, ApiToUpload api)
         {
             var file = XDocument.Load(filePath);
             var el = file.Elements().First().Elements().First().Elements().First();
             var PathForTable = ParseFilePath(filePath);
             var idFile = api.GetIdEduPlan(PathForTable);
+
             foreach (var element in el.Elements())
             {
                 var elName = element.Name.LocalName;
-                var columns = api.GetTableColumns(elName).Elements().First().Elements().Select(TableColumnInfo.Parse).ToArray();
-                var tableRow = namesOfTablesData[elName];
-                var isFirstRecord = tableRow.ToString().EndsWith("values\n\t") || tableRow.Length == 0;
-                if (isFirstRecord)
+                
+                if (namesOfTablesData.TryGetValue(elName, out var tableInfo))
                 {
-                    tableRow.Append("(");
-                }
-                else
-                {
-                    tableRow.Append(", (");
-                }
-                tableRow.Append($"{idFile}");
-                foreach (var column in columns)
-                {
+                    var (tableRow, isFirstRecord) = tableInfo;
 
-                    //var value = attribute.Value;
-                    var attrValue = element.Attributes().FirstOrDefault(a => a.Name.LocalName == column.Name);
-                    if (attrValue is not null && attrValue.Value != "" && column.Datatype is not null)
-                        if (column.Datatype.Contains("varchar"))
+                    if (isFirstRecord)
+                    {
+                        tableRow.Append("(");
+                        namesOfTablesData[elName] = (tableRow, false);
+                    }
+                    else
+                    {
+                        tableRow.Append(", (");
+                    }
+                    tableRow.Append($"{idFile}");
+
+                    var columns = GetCachedTableColumns(elName, api);
+
+                    foreach (var column in columns)
+                    {
+                        var attrValue = element.Attributes().FirstOrDefault(a => a.Name.LocalName == column.Name);
+
+                        if (attrValue is not null && attrValue.Value != "" && column.Datatype is not null)
                         {
-                            tableRow.Append($", '{attrValue.Value}'");
+                            if (column.Datatype.Contains("varchar"))
+                            {
+                                tableRow.Append($", '{attrValue.Value}'");
+                            }
+                            else
+                            {
+                                tableRow.Append($", {attrValue.Value}");
+                            }
                         }
                         else
                         {
-                            tableRow.Append($", {attrValue.Value}");
+                            tableRow.Append($", null");
                         }
-                    else
-                        tableRow.Append($", null");
-
+                    }
+                    tableRow.Append(")\n\t");
                 }
-                tableRow.Append(")\n\t");
-                
             }
-            //File.WriteAllText($"C:\\prj\\DataSourceText\\{idFile}\\", tableRow.ToString());
         }
 
         static void MainLoop(ApiToUpload api)
         {
-                Console.WriteLine("Введите путь к папке 'Планы':");
-                //var input = "C:\\Users\\kilyushev_nd\\Desktop\\PlanyVS\\Планы";
-                var input = "D:\\khsu\\Планы";
-                var tablesNames = api.GetTablesInDB();
-                AddToDictionary(tablesNames, api);
+            Console.WriteLine("Введите путь к папке 'Планы':");
+            //var input = "C:\\Users\\kilyushev_nd\\Desktop\\PlanyVS\\Планы";
+            var input = "D:\\khsu\\Планы";
+            var tablesNames = api.GetTablesInDB();
+            AddToDictionary(tablesNames, api);
 
-                if (string.IsNullOrWhiteSpace(input) || !Directory.Exists(input))
+            if (string.IsNullOrWhiteSpace(input) || !Directory.Exists(input))
+            {
+                Console.WriteLine("Указанный файл не существует.");
+                return;
+            }
+            var files = GetXmlFiles(input);
+            //try
+            //{
+            Parallel.ForEach(files, filePath =>
+            {
+                Console.WriteLine($"Обработка файла: {filePath}");
+                lock (namesOfTablesData)
                 {
-                    Console.WriteLine("Указанный файл не существует.");
-                    return;
+                    GetDataForTables(filePath, api);
                 }
                 //try
                 //{
-                foreach (var filePath in GetXmlFiles(input))
-                {
-                    Console.WriteLine($"{filePath}");
-                    GetDataForTables(filePath, api);
-                    //try
-                    //{
-                    //    Console.WriteLine('\n');
-                    //}
-                    //catch (Exception ex)
-                    //{
-                    //    Console.WriteLine($"Ошибка при обработке файла {filePath}: {ex.Message}");
-                    //}
-
-                }
-                Console.WriteLine(namesOfTablesData.ToString());
-                SaveDictionaryToFiles(namesOfTablesData, "D:\\khsu\\E\\ForSQL\\"); // Папка для сохранения
+                //    Console.WriteLine('\n');
                 //}
                 //catch (Exception ex)
                 //{
-                //    Console.WriteLine($"Произошла ошибка: {ex.Message}");
+                //    Console.WriteLine($"Ошибка при обработке файла {filePath}: {ex.Message}");
                 //}
+
+            });
+            SaveDictionaryToFiles(namesOfTablesData.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.tableData), "D:\\khsu\\E\\ForSQL\\"); // Папка для сохранения
+            //}
+            //catch (Exception ex)
+            //{
+            //    Console.WriteLine($"Произошла ошибка: {ex.Message}");
+            //}
 
         }
 
