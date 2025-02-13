@@ -162,9 +162,9 @@ namespace InjectData
 
         static void MainLoop(ApiToUpload api)
         {
-            Console.WriteLine("Введите путь к папке 'Планы':");
             //var input = "C:\\Users\\kilyushev_nd\\Desktop\\PlanyVS\\Планы";
             var input = "D:\\khsu\\Планы";
+            Console.WriteLine($"Путь к папке 'Планы': {input}");
             var tablesNames = api.GetTablesInDB();
             AddToDictionary(tablesNames, api);
 
