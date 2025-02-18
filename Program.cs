@@ -144,8 +144,7 @@ namespace InjectData
                             {
                                 if (attrValue.Value.Contains("'"))
                                 {
-                                    var toBase64Encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(attrValue.Value));
-                                    tableRow.Append($", 'PRFX_B64:{toBase64Encoded}'");
+                                    tableRow.Append($", '{attrValue.Value.Replace("'", "''")}'");
                                 }
                                 else
                                 {
