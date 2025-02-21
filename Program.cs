@@ -64,13 +64,12 @@ namespace InjectData
                 try
                 {
                     File.WriteAllText(filePath, content, Encoding.Unicode);
+                    Console.WriteLine($"Успешная запись в файл: {fileName}");
                 }
                 catch (IOException ex)
                 {
                     Console.WriteLine($"Ошибка записи в файл: {fileName}");
                 }
-
-                Console.WriteLine($"Успешная запись в файл: {fileName}");
             }
         }
         //Сделать словарь
@@ -120,10 +119,16 @@ namespace InjectData
             var PathForTable = ParseFilePath(filePath);
             var idFile = api.GetIdEduPlan(PathForTable);
 
-            foreach (var element in el.Elements())
+            foreach (var element in el.Elements().SelectMany(el => el.Elements().Prepend(el)))
             {
                 var elName = element.Name.LocalName;
-                
+
+                if (elName == "ООП" && element.Attribute("КодРодительскогоООП") is not null)
+                {
+                    elName = "ООП2";
+                }
+
+
                 if (namesOfTablesData.TryGetValue(elName, out var lst))
                 {
                     var tableRow = new StringBuilder();
@@ -142,15 +147,7 @@ namespace InjectData
                         {
                             if (column.Datatype.StartsWith("varchar") || column.Datatype.StartsWith("datetime2"))
                             {
-                                if (attrValue.Value.Contains("'"))
-                                {
                                     tableRow.Append($", '{attrValue.Value.Replace("'", "''")}'");
-                                }
-                                else
-                                {
-                                    tableRow.Append($", '{attrValue.Value}'");
-                                }
-                                    
                             }
                             else if (column.Datatype == "bit")
                             {
@@ -175,7 +172,7 @@ namespace InjectData
         static void MainLoop(ApiToUpload api)
         {
             
-            var input = "D:\\khsu\\Планы";
+            var input = "C:\\Users\\kilyushev_nd\\Desktop\\PlanyVS\\Планы";
             Console.WriteLine($"Путь к папке 'Планы': {input}");
             var tablesNames = api.GetTablesInDB();
             AddToDictionary(tablesNames, api);
@@ -205,7 +202,7 @@ namespace InjectData
                 //}
 
             });
-            SaveDictionaryToFiles(namesOfTablesData, "D:\\khsu\\E\\ForSQL"); // Папка для сохранения "C:\\Users\\kilyushev_nd\\Desktop\\PlanyVS\\Final"
+            SaveDictionaryToFiles(namesOfTablesData, "C:\\Users\\kilyushev_nd\\Desktop\\PlanyVS\\Final"); // Папка для сохранения "C:\\Users\\kilyushev_nd\\Desktop\\PlanyVS\\Final"
             //}
             //catch (Exception ex)
             //{
