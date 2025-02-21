@@ -172,7 +172,7 @@ namespace InjectData
         static void MainLoop(ApiToUpload api)
         {
             
-            var input = "C:\\Users\\kilyushev_nd\\Desktop\\PlanyVS\\Планы";
+            var input = "D:\\khsu\\Планы";
             Console.WriteLine($"Путь к папке 'Планы': {input}");
             var tablesNames = api.GetTablesInDB();
             AddToDictionary(tablesNames, api);
@@ -185,13 +185,11 @@ namespace InjectData
             var files = GetXmlFiles(input);
             //try
             //{
-            Parallel.ForEach(files, filePath =>
+            foreach(var filePath in files)
             {
                 Console.WriteLine($"Обработка файла: {filePath}");
-                lock (namesOfTablesData)
-                {
-                    GetDataForTables(filePath, api);
-                }
+                GetDataForTables(filePath, api);
+
                 //try
                 //{
                 //    Console.WriteLine('\n');
@@ -202,7 +200,7 @@ namespace InjectData
                 //}
 
             });
-            SaveDictionaryToFiles(namesOfTablesData, "C:\\Users\\kilyushev_nd\\Desktop\\PlanyVS\\Final"); // Папка для сохранения "C:\\Users\\kilyushev_nd\\Desktop\\PlanyVS\\Final"
+            SaveDictionaryToFiles(namesOfTablesData, "D:\\khsu\\E\\ForSQL"); // Папка для сохранения "C:\\Users\\kilyushev_nd\\Desktop\\PlanyVS\\Final"
             //}
             //catch (Exception ex)
             //{
