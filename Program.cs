@@ -34,7 +34,13 @@ namespace InjectData
                 var fileName = keyAndValue.Key;
                 var fileValue = keyAndValue.Value;
                 var filePath = Path.Combine(Directory, $"{fileName}.txt");
-                
+
+                if (!tableColumnsCache.ContainsKey(fileName))
+                {
+                    Console.WriteLine($"Пропущена таблица {fileName}: отсутствует информация о столбцах.");
+                    continue; // Пропускаем таблицу, если нет информации о столбцах
+                }
+
                 var insert = 
                     $"insert into [dbo].[{fileName}] ([id_education_plan], [" 
                     + string.Join("], [", tableColumnsCache[fileName].Select(ci => ci.Name)) 
