@@ -199,7 +199,7 @@ namespace InjectData
                 //    Console.WriteLine($"Ошибка при обработке файла {filePath}: {ex.Message}");
                 //}
 
-            });
+            };
             SaveDictionaryToFiles(namesOfTablesData, "D:\\khsu\\E\\ForSQL"); // Папка для сохранения "C:\\Users\\kilyushev_nd\\Desktop\\PlanyVS\\Final"
             //}
             //catch (Exception ex)
